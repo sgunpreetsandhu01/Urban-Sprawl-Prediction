@@ -1,0 +1,409 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(raster)
+library(sf)
+library(tmap) # for making the nice plot
+library(osmdata)
+library(tidyverse)
+library(terra)
+library(spDataLarge)
+library(stars)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+land_coverage_2010 <- "/Users/gunpreetsingh/Desktop/landcover-2010-classification.tif" |>
+  rast()
+
+crs(land_coverage_2010) <- "EPSG:3979"
+
+```
+
+```{r}
+# Define the extent of Toronto in lat/lon
+brampton_extent_latlon <- ext(-79.8587, -79.6633, 43.6319, 43.7559)
+
+# Create a SpatVector with the extent in lat/lon
+brampton_extent <- brampton_extent_latlon |> 
+  vect(crs = "EPSG:4326") |>
+  project("EPSG:3979") |>
+  ext()
+
+land_coverage_2010_brampton <- crop(land_coverage_2010,brampton_extent)
+
+```
+
+```{r}
+# Define the bounding box coordinates
+brampton_bbox <- c(left = -79.8587, right = -79.6633, bottom = 43.6319, top = 43.7559)
+
+#Extracting Toronto Boundary using OpenStreetMap and creating an sf_dataframe
+brampton_area <- opq(bbox=brampton_bbox) |> 
+  add_osm_feature(key="boundary", value = "administrative") |> 
+  add_osm_feature(key="name",value = "Brampton") |>
+  add_osm_feature(key="admin_level",value = "8") |>
+  osmdata_sf() |>
+  (\(x) x$osm_multipolygons)() 
+
+#Changing the CRS of the toronto_area that was extracted from the osm
+brampton_area = st_transform(brampton_area, crs = 3979)
+```
+
+```{r, echo=FALSE}
+#Cropping and masking the toronto area with toronto land use raster data
+brampton_area_2010_masked = crop(land_coverage_2010_brampton,brampton_area) |>
+  mask(brampton_area)
+
+color_palette <-  c("#115f9a", "#1984c5", "#22a7f0", "#48b5c4", "#76c68f", "#a6d75b", "#c9e52f", "#d0ee11", "#d0f400")
+
+#Plotting Toronto Land Use Data using tmap 
+tm_shape(brampton_area_2010_masked) +
+  tm_raster(palette = color_palette) +
+  tm_shape(brampton_area) +
+  tm_borders(col = "blue", lwd = 2) +
+  tm_layout(title = "Land Coverage of Brampton 2010",legend.outside = TRUE)
+```
+
+```{r}
+land_coverage_2015 <- "/Users/gunpreetsingh/Desktop/landcover-2015-classification.tif" |>
+  rast()
+
+crs(land_coverage_2015) <- "EPSG:3979"
+
+land_coverage_2015_brampton <- crop(land_coverage_2015,brampton_extent)
+
+#Cropping and masking the Brampton area with toronto land use raster data
+brampton_area_2015_masked = crop(land_coverage_2015_brampton,brampton_area) |>
+  mask(brampton_area)
+
+color_palette <-  c("#115f9a", "#1984c5", "#22a7f0", "#48b5c4", "#76c68f", "#a6d75b", "#c9e52f", "#d0ee11", "#d0f400")
+
+#Plotting Brampton Land Use Data using tmap 
+tm_shape(brampton_area_2015_masked) +
+  tm_raster(palette = color_palette) +
+  tm_shape(brampton_area) +
+  tm_borders(col = "blue", lwd = 2) +
+  tm_layout(title = "Land Coverage of Brampton 2015",legend.outside = TRUE)
+```
+
+
+
+```{r}
+land_coverage_2020 <- "/Users/gunpreetsingh/Desktop/landcover-2020-classification.tif" |>
+  rast()
+
+crs(land_coverage_2020) <- "EPSG:3979"
+
+land_coverage_2020_brampton <- crop(land_coverage_2020,brampton_extent)
+
+#Cropping and masking the Brampton area with toronto land use raster data
+brampton_area_2020_masked = crop(land_coverage_2020_brampton,brampton_area) |>
+  mask(brampton_area)
+
+color_palette <-  c("#115f9a", "#1984c5", "#22a7f0", "#48b5c4", "#76c68f", "#a6d75b", "#c9e52f", "#d0ee11", "#d0f400")
+
+#Plotting Brampton Land Use Data using tmap 
+tm_shape(brampton_area_2020_masked) +
+  tm_raster(palette = color_palette) +
+  tm_shape(brampton_area) +
+  tm_borders(col = "blue", lwd = 2) +
+  tm_layout(title = "Land Coverage of Brampton 2020",legend.outside = TRUE)
+```
+
+```{r}
+library(stringr)
+library(dplyr)
+
+data_cleaned <- Community_Buildings[!is.na(Community_Buildings$Latitude), ]
+
+data_cleaned <- data_cleaned |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+```
+
+```{r}
+data_filtered <- data_cleaned %>% filter(`Target Completion Date` != "To Be Determined")
+
+data <- data_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+data_filtered <- data_filtered |>
+  mutate(Year=data)
+
+data_filtered <- data_filtered[!is.na(data_filtered$Year), ]
+
+
+data_filtered$Longitude <- as.numeric(data_filtered$Longitude)
+data_filtered$Latitude <- as.numeric(data_filtered$Latitude)
+
+data_filtered <- data_filtered[!is.na(data_filtered$Longitude), ]
+
+sf_data <- st_as_sf(data_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+st_write(sf_data,"/Users/gunpreetsingh/Desktop/community_data.shp")
+```
+
+```{r}
+healthcare <- healthcare[!is.na(healthcare$Latitude), ]
+
+healthcare <- healthcare |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+health_data_filtered <- healthcare %>% filter(`Target Completion Date` != "To Be Determined")
+
+health_data <- health_data_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+health_data <- health_data_filtered |>
+  mutate(Year=health_data)
+
+health_data <- health_data[!is.na(health_data$Year), ]
+
+
+health_data$Longitude <- as.numeric(health_data$Longitude)
+health_data$Latitude <- as.numeric(health_data$Latitude)
+
+health_data <- health_data[!is.na(health_data$Longitude), ]
+
+sf_health_data <- st_as_sf(health_data, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+st_write(sf_health_data,"/Users/gunpreetsingh/Desktop/healthcare.shp")
+
+```
+
+```{r}
+recreation <- recreation[!is.na(recreation$Latitude), ]
+
+recreation <- recreation |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+recreation_data_filtered <- recreation %>% filter(`Target Completion Date` != "To Be Determined")
+
+recreation_data <- recreation_data_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+
+recreation_data_filtered <- recreation_data_filtered |>
+  mutate(Year=recreation_data)
+
+na_indexes <- which(is.na(recreation_data_filtered$Year))
+
+missing_years <- list()
+
+
+for (y in na_indexes){
+  print(y)
+  missing_years <- append(missing_years,list(recreation_data_filtered$`Target Completion Date`[[y]]))
+}
+
+recreation_data_filtered$Year[na_indexes] <- missing_years
+
+recreation_data_filtered <- recreation_data_filtered[!is.na(recreation_data_filtered$Year), ]
+
+
+recreation_data_filtered$Longitude <- as.numeric(recreation_data_filtered$Longitude)
+recreation_data_filtered$Latitude <- as.numeric(recreation_data_filtered$Latitude)
+
+recreation_data_filtered <- recreation_data_filtered[!is.na(recreation_data_filtered$Longitude), ]
+
+sf_recreation_data <- st_as_sf(recreation_data_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+sf_recreation_data$Year <- as.numeric(sf_recreation_data$Year)
+
+sf_recreation_data <- sf_recreation_data[!is.na(sf_recreation_data$Year), ]
+
+st_write(sf_recreation_data,"/Users/gunpreetsingh/Desktop/recreation.shp")
+
+```
+
+```{r}
+child_care <- child_care[!is.na(child_care$Latitude), ]
+
+child_care <- child_care |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+child_care_filtered <- child_care |>
+  filter(`Target Completion Date` != "To Be Determined")
+
+child_care_data <- child_care_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+
+child_care_filtered <- child_care_filtered |>
+  mutate(Year=child_care_data)
+
+na_indices <- which(is.na(child_care_filtered$Year))
+
+missing_years <- list()
+
+
+for (y in na_indices){
+  print(y)
+  missing_years <- append(missing_years,list(child_care_filtered$`Target Completion Date`[[y]]))
+}
+
+child_care_filtered$Year[na_indices] <- missing_years
+
+child_care_filtered <- child_care_filtered[!is.na(child_care_filtered$Year), ]
+
+
+child_care_filtered$Longitude <- as.numeric(child_care_filtered$Longitude)
+child_care_filtered$Latitude <- as.numeric(child_care_filtered$Latitude)
+
+child_care_filtered <- child_care_filtered[!is.na(child_care_filtered$Longitude), ]
+
+sf_child_care_filtered <- st_as_sf(child_care_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+sf_child_care_filtered$Year <- as.numeric(sf_child_care_filtered$Year)
+
+sf_child_care_filtered <- sf_child_care_filtered[!is.na(sf_child_care_filtered$Year), ]
+
+st_write(sf_child_care_filtered,"/Users/gunpreetsingh/Desktop/childcare.shp")
+```
+
+
+```{r}
+roads_and_bridges <- roads_and_bridges[!is.na(roads_and_bridges$Latitude), ]
+
+roads_and_bridges <- roads_and_bridges |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+roads_and_bridges_filtered <- roads_and_bridges |>
+  filter(`Target Completion Date` != "To Be Determined")
+
+roads_and_bridges_data <- roads_and_bridges_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+
+roads_and_bridges_filtered <- roads_and_bridges_filtered |>
+  mutate(Year=roads_and_bridges_data)
+
+na_indices <- which(is.na(roads_and_bridges_filtered$Year))
+
+missing_years <- list()
+
+
+for (y in na_indices){
+  print(y)
+  missing_years <- append(missing_years,list(roads_and_bridges_filtered$`Target Completion Date`[[y]]))
+}
+
+roads_and_bridges_filtered$Year[na_indices] <- missing_years
+
+roads_and_bridges_filtered <- roads_and_bridges_filtered[!is.na(roads_and_bridges_filtered$Year), ]
+
+
+roads_and_bridges_filtered$Longitude <- as.numeric(roads_and_bridges_filtered$Longitude)
+roads_and_bridges_filtered$Latitude <- as.numeric(roads_and_bridges_filtered$Latitude)
+
+roads_and_bridges_filtered <- roads_and_bridges_filtered[!is.na(roads_and_bridges_filtered$Longitude), ]
+
+sf_roads_and_bridges <- st_as_sf(roads_and_bridges_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+sf_roads_and_bridges$Year <- as.numeric(sf_roads_and_bridges$Year)
+
+sf_roads_and_bridges <- sf_roads_and_bridges[!is.na(sf_roads_and_bridges$Year), ]
+
+st_write(sf_roads_and_bridges,"/Users/gunpreetsingh/Desktop/roads_and_bridges.shp")
+```
+```{r}
+transit <- transit[!is.na(transit$Latitude), ]
+
+transit <- transit |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+transit_filtered <- transit |>
+  filter(`Target Completion Date` != "To Be Determined")
+
+transit_data <- transit_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+
+transit_filtered <- transit_filtered |>
+  mutate(Year=transit_data)
+
+na_indices <- which(is.na(transit_filtered$Year))
+
+missing_years <- list()
+
+
+for (y in na_indices){
+  print(y)
+  missing_years <- append(missing_years,list(transit_filtered$`Target Completion Date`[[y]]))
+}
+
+transit_filtered$Year[na_indices] <- missing_years
+
+transit_filtered <- transit_filtered[!is.na(transit_filtered$Year), ]
+
+
+transit_filtered$Longitude <- as.numeric(transit_filtered$Longitude)
+transit_filtered$Latitude <- as.numeric(transit_filtered$Latitude)
+
+transit_filtered <- transit_filtered[!is.na(transit_filtered$Longitude), ]
+
+sf_transit <- st_as_sf(transit_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+sf_transit$Year <- as.numeric(sf_transit$Year)
+
+sf_transit <- sf_transit[!is.na(sf_transit$Year), ]
+
+st_write(sf_transit,"/Users/gunpreetsingh/Desktop/transit.shp")
+```
+```{r}
+education <- education[!is.na(education$Latitude), ]
+
+education <- education |>
+  select(-Project,-Description,-Result,-Address,-`Postal Code`,-`Highway / Transit Line`,-`Municipal Funding`,-`Federal Funding`,-`Other Funding`,-Website)
+
+education_filtered <- education |>
+  filter(`Target Completion Date` != "To Be Determined")
+
+education_data <- education_filtered$`Target Completion Date`|>
+  parse_date_time(orders="my")|> 
+  year()
+
+
+education_filtered <- education_filtered |>
+  mutate(Year=education_data)
+
+na_indices <- which(is.na(education_filtered$Year))
+
+missing_years <- list()
+
+
+for (y in na_indices){
+  print(y)
+  missing_years <- append(missing_years,list(education_filtered$`Target Completion Date`[[y]]))
+}
+
+education_filtered$Year[na_indices] <- missing_years
+
+education_filtered <- education_filtered[!is.na(education_filtered$Year), ]
+
+
+education_filtered$Longitude <- as.numeric(education_filtered$Longitude)
+education_filtered$Latitude <- as.numeric(education_filtered$Latitude)
+
+education_filtered <- education_filtered[!is.na(education_filtered$Longitude), ]
+
+sf_education <- st_as_sf(education_filtered, coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant")
+
+sf_education$Year <- as.numeric(sf_education$Year)
+
+sf_education <- sf_education[!is.na(sf_education$Year), ]
+
+st_write(sf_education,"/Users/gunpreetsingh/Desktop/education.shp")
+```
+

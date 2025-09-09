@@ -1,0 +1,604 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(raster)
+library(sf)
+library(tmap) # for making the nice plot
+library(osmdata)
+library(OpenStreetMap)
+library(tidyverse)
+library(terra)
+library(spDataLarge)
+library(stars)
+library(ggplot2)
+library(dplyr)
+library(tmaptools)
+```
+
+```{r}
+ontario_bbox <- c(left = -95.1537, right = -74.3202, bottom = 41.6766, top = 56.8566)
+
+# Query OpenStreetMap for administrative boundaries of Toronto
+ontario_border <- opq(bbox = ontario_bbox, timeout=120) |>
+  add_osm_feature(key = "boundary", value = "administrative") |> 
+  add_osm_feature(key = "ISO3166-2", value = "CA-ON") |>
+  add_osm_feature(key = "admin_level", value = "4") |> 
+  add_osm_feature(key = "type", value = "boundary") |> 
+  add_osm_feature(key = "wikidata", value = "Q1904") |> 
+  add_osm_feature(key = "name:en", value = "Ontario") |> 
+  osmdata_sf() |>
+  (\(x) x$osm_multipolygons)() |>
+  select(osm_id,admin_level,border_type,name,boundary)
+
+ontario_border = st_transform(ontario_border, crs = 4326)
+ontario_basemap = read_osm(ontario_border, type = "esri-topo")
+
+
+ontario_border = st_transform(ontario_border, st_crs(ontario_basemap))
+ontario_cropped <- st_crop(ontario_basemap, ontario_border)
+
+
+tm_shape(ontario_cropped) +
+  tm_rgb()
+
+```
+```{r}
+
+community <- read_sf('/Users/gunpreetsingh/Desktop/6500 Datasets/Comunity building data/community_data.shp')
+recreation <- read_sf('/Users/gunpreetsingh/Desktop/6500 Datasets/recreation data/recreation.shp')
+
+community_and_recreation <- rbind(community,recreation)
+year_count <- table(community_and_recreation$Year)
+print(year_count)
+
+new_df <- community_and_recreation |>
+  filter(Status == 'Complete')
+
+year_count_new <- table(new_df$Year)
+print(year_count_new)
+
+cr_first <- new_df |>
+  filter(Year>= 2014 & Year<=2017)
+
+cr_second <- new_df |>
+  filter(Year> 2017 & Year<=2020)
+
+cr_third <- new_df |>
+  filter(Year> 2020 & Year<=2024)
+
+cr_first_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(cr_first) +
+  tm_dots(col = "red", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_layout(title = "Ontario community projects 2014-17")
+
+
+cr_second_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(cr_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(cr_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_layout(title = "Ontario community projects 2014-20")
+
+cr_third_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(cr_first) +
+  tm_dots(col = "red", size = 0.1,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(cr_second) +
+  tm_dots(col = "blue", size = 0.05,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(cr_third) +
+  tm_dots(col = "green", size = 0.025,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(title = "Ontario community projects 2014-24")
+
+tmap_arrange(cr_first_plot, cr_second_plot, cr_third_plot, ncol = 3)
+```
+
+```{r}
+brampton_bbox <- c(left = -79.8587, right = -79.6633, bottom = 43.6319, top = 43.7559)
+
+# Query OpenStreetMap for administrative boundaries of Toronto
+brampton_border <- opq(bbox = brampton_bbox, timeout=120) |>
+  add_osm_feature(key = "boundary", value = "administrative") |> 
+  add_osm_feature(key = "admin_level", value = "8") |> 
+  add_osm_feature(key = "type", value = "boundary") |> 
+  add_osm_feature(key = "wikidata", value = "Q44198") |> 
+  add_osm_feature(key = "name", value = "Brampton") |> 
+  osmdata_sf() |>
+  (\(x) x$osm_multipolygons)() 
+
+brampton_border = st_transform(brampton_border, crs = 4326)
+brampton_basemap = read_osm(brampton_border, type = "esri-topo")
+
+
+brampton_border = st_transform(brampton_border, st_crs(brampton_basemap))
+brampton_cropped <- st_crop(brampton_basemap, brampton_border)
+
+tm_shape(brampton_cropped) +
+  tm_rgb()
+```
+```{r}
+cr_first <- st_transform(cr_first,st_crs(brampton_border))
+brampton_first <- cr_first[brampton_border,,op=st_within]
+
+cr_second <- st_transform(cr_second,st_crs(brampton_border))
+brampton_second <- cr_second[brampton_border,,op=st_within]
+
+cr_third <- st_transform(cr_third,st_crs(brampton_border))
+brampton_third <- cr_third[brampton_border,,op=st_within]
+
+brampton_first_plot <-  tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_layout(
+    title = "Brampton Community and Recreational Projects 2014-17",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.5,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+
+brampton_second_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_layout(
+    title = "Brampton Community and Recreational Projects 2014-20",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.5,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+brampton_third_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(brampton_third) +
+  tm_dots(col = "green", size = 0.025, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(
+    title = "Brampton Community and Recreational Projects 2014-24",
+    legend.outside = FALSE ,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.5,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+tmap_arrange(brampton_first_plot, brampton_second_plot, brampton_third_plot, ncol = 3)
+```
+
+```{r,fig.align = "center", fig.height = 6}
+tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(brampton_third) +
+  tm_dots(col = "green", size = 0.03, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(
+    title = "Brampton Community and Recreational Projects 2014-24",
+    title.size = 4,
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 2,
+    legend.text.size = 0.8,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+```
+```{r}
+library(spatstat)
+
+new_df <- st_transform(new_df,st_crs(brampton_border))
+brampton_community_df <- new_df[brampton_border,,op=st_within]
+
+# Check the CRS and transform if necessary
+com_gdf <- st_transform(brampton_community_df, crs = 32617)  # UTM Zone 17N, adjust based on your location
+
+# Calculate bounding box and create observation window
+com_bbox <- st_bbox(com_gdf)
+com_window <- owin(xrange = c(com_bbox["xmin"], com_bbox["xmax"]),yrange = c(com_bbox["ymin"], com_bbox["ymax"]))
+
+# Convert the sf object to a point pattern (ppp) object
+com_ppp <- as.ppp(st_coordinates(com_gdf), W = window)
+
+# Calculate Kernel Density Estimation
+com_kde_density <- density(com_ppp, sigma = 2000, at = "pixels")  # Sigma is the bandwidth, adjust as needed
+
+# Convert KDE result to a raster object
+com_kde_raster <- rast(com_kde_density)
+
+# Set CRS for the raster
+crs(com_kde_raster) <- "EPSG:32617"
+
+# Plot the KDE using tmap
+tm_shape(com_kde_raster*1000000) +
+  tm_raster(palette = c("blue", "green", "yellow", "red"),
+            title = "KDE of Community and Recreational Buildings") +
+  tm_shape(com_gdf) +
+  tm_dots(size = 0.1, col = "black", title = "Community and Recreational Buildings Locations") +
+  tm_layout(legend.outside = TRUE)
+```
+
+```{r}
+
+map_base <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_layout(title = "Brampton Community Projects Base Layer")
+
+print(map_base)
+
+
+map_with_first <- map_base +
+  tm_shape(brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = TRUE, title = "2014-17 Projects")
+
+
+print(map_with_first)
+
+
+map_with_second <- map_with_first +
+  tm_shape(brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = TRUE, title = "2017-20 Projects")
+
+print(map_with_second)
+
+map_with_third <- map_with_second +
+  tm_shape(brampton_third) +
+  tm_dots(col = "green", size = 0.025, popup.vars = c("id", "name"), legend.show = TRUE, title = "2020-24 Projects") +
+  tm_layout(title = "Brampton Community Projects 2014-24",
+            legend.outside = TRUE, 
+            legend.outside.position = "right",  # Position the legend outside the plot to the right
+            legend.title.size = 1.2,  
+            legend.text.size = 0.8,  
+            legend.bg.color = "white",  
+            legend.bg.alpha = 0.5)
+
+
+print(map_with_third)
+```
+
+```{r}
+
+childcare <- read_sf('/Users/gunpreetsingh/Desktop/6500 Datasets/child-care data/childcare.shp')
+education <- read_sf('/Users/gunpreetsingh/Desktop/6500 Datasets/education data/education.shp')
+
+edu <- rbind(childcare,education)
+edu_year_count <- table(edu$Year)
+print(edu_year_count)
+
+edu_new_df <- edu |>
+  filter(Status == 'Complete')
+
+edu_year_count_new <- table(edu_new_df$Year)
+print(edu_year_count_new)
+
+edu_first <- edu_new_df |>
+  filter(Year>= 2012 & Year<=2017)
+
+edu_second <- edu_new_df |>
+  filter(Year> 2017 & Year<=2020)
+
+edu_third <- edu_new_df |>
+  filter(Year> 2020 & Year<=2025)
+
+edu_first_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(edu_first) +
+  tm_dots(col = "red", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_layout(title = "Ontario Education and Childcare Projects 2014-17")
+
+
+edu_second_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(edu_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(edu_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_layout(title = "Ontario Education and Childcare Projects 2014-20")
+
+edu_third_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(edu_first) +
+  tm_dots(col = "red", size = 0.1,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(edu_second) +
+  tm_dots(col = "blue", size = 0.05,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(edu_third) +
+  tm_dots(col = "green", size = 0.025,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(title = "Ontario Education and Childcare Projects 2014-24")
+
+tmap_arrange(edu_first_plot, edu_second_plot, edu_third_plot, ncol = 3)
+
+```
+
+```{r}
+edu_first <- st_transform(edu_first,st_crs(brampton_border))
+edu_brampton_first <- edu_first[brampton_border,,op=st_within]
+
+edu_second <- st_transform(edu_second,st_crs(brampton_border))
+edu_brampton_second <- edu_second[brampton_border,,op=st_within]
+
+edu_third <- st_transform(edu_third,st_crs(brampton_border))
+edu_brampton_third <- edu_third[brampton_border,,op=st_within]
+
+edu_brampton_first_plot <-  tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(edu_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_layout(
+    title = "Brampton Education and Childcare Projects 2014-17",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 3,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+
+edu_brampton_second_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(edu_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(edu_brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_layout(
+    title = "Brampton Education and Childcare Projects 2014-20",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 3,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+edu_brampton_third_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(edu_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(edu_brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(edu_brampton_third) +
+  tm_dots(col = "green", size = 0.025, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(
+    title = "Brampton Education and Childcare Projects 2014-24",
+    title.size = 3,
+    legend.outside = ,
+    legend.outside.position = "right",
+    legend.title.size = 1.5,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+tmap_arrange(edu_brampton_first_plot, edu_brampton_second_plot, edu_brampton_third_plot, ncol = 3)
+```
+
+```{r,fig.align = "center", fig.height = 6}
+tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(edu_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(edu_brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(edu_brampton_third) +
+  tm_dots(col = "green", size = 0.03, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.5) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.5) +
+  tm_layout(
+    title = "Brampton Education and Childcare Projects 2014-24",
+    title.size = 4,
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 3,
+    legend.text.size = 0.8,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+```
+
+
+
+```{r}
+
+library(spatstat)
+new_edu_df <- st_transform(edu_new_df,st_crs(brampton_border))
+brampton_edu_df <- new_edu_df[brampton_border,,op=st_within]
+
+# Check the CRS and transform if necessary
+edu_gdf <- st_transform(brampton_edu_df, crs = 32617)  # UTM Zone 17N, adjust based on your location
+
+# Calculate bounding box and create observation window
+edu_bbox <- st_bbox(edu_gdf)
+window <- owin(xrange = c(edu_bbox["xmin"], edu_bbox["xmax"]),
+               yrange = c(edu_bbox["ymin"], edu_bbox["ymax"]))
+
+# Convert the sf object to a point pattern (ppp) object
+edu_ppp <- as.ppp(st_coordinates(edu_gdf), W = window)
+
+# Calculate Kernel Density Estimation
+kde_density <- density(edu_ppp, sigma = 1000, at = "pixels")  # Sigma is the bandwidth, adjust as needed
+
+# Convert KDE result to a raster object
+kde_raster <- rast(kde_density)
+
+# Set CRS for the raster
+crs(kde_raster) <- "EPSG:32617"
+
+# Plot the KDE using tmap
+tm_shape(kde_raster*1000000) +
+  tm_raster(palette = c("blue", "green", "yellow", "red"),
+            title = "KDE of Education and Childcare Centers") +
+  tm_shape(edu_gdf) +
+  tm_dots(size = 0.1, col = "black", title = "Education Locations") +
+  tm_layout(legend.outside = TRUE)
+```
+
+
+```{r}
+healthcare <- read_sf('/Users/gunpreetsingh/Desktop/6500 Datasets/healthcare data/healthcare.shp')
+
+healthcare_year_count <- table(healthcare$Year)
+print(healthcare_year_count)
+
+healthcare_new_df <- healthcare |>
+  filter(Status == 'Complete')
+
+healthcare_year_count_new <- table(healthcare_new_df$Year)
+print(healthcare_year_count_new)
+
+healthcare_first <- healthcare_new_df |>
+  filter(Year>= 2012 & Year<=2017)
+
+healthcare_second <- healthcare_new_df |>
+  filter(Year> 2017 & Year<=2020)
+
+healthcare_third <- healthcare_new_df |>
+  filter(Year> 2020 & Year<=2025)
+
+healthcare_first_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(healthcare_first) +
+  tm_dots(col = "red", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.6) +
+  tm_layout(title = "Ontario Healthcare Projects 2014-17")
+
+
+healthcare_second_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(healthcare_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(healthcare_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.6) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.6) +
+  tm_layout(title = "Ontario Healthcare Projects 2014-20")
+
+healthcare_third_plot <- tm_shape(ontario_cropped) +
+  tm_rgb()+
+  tm_shape(healthcare_first) +
+  tm_dots(col = "red", size = 0.1,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(healthcare_second) +
+  tm_dots(col = "blue", size = 0.05,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE) +
+  tm_shape(healthcare_third) +
+  tm_dots(col = "green", size = 0.025,alpha=0.5, popup.vars = c("id", "name"),legend.show = FALSE)+
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.6) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.6) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.6) +
+  tm_layout(title = "Ontario Healthcare Projects 2014-24")
+
+tmap_arrange(healthcare_first_plot, healthcare_second_plot, healthcare_third_plot, ncol = 3)
+```
+
+
+```{r}
+healthcare_first <- st_transform(healthcare_first,st_crs(brampton_border))
+healthcare_brampton_first <- healthcare_first[brampton_border,,op=st_within]
+
+healthcare_second <- st_transform(healthcare_second,st_crs(brampton_border))
+healthcare_brampton_second <- healthcare_second[brampton_border,,op=st_within]
+
+healthcare_third <- st_transform(healthcare_third,st_crs(brampton_border))
+healthcare_brampton_third <- healthcare_third[brampton_border,,op=st_within]
+
+healthcare_brampton_first_plot <-  tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(healthcare_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.8) +
+  tm_layout(
+    title = "Brampton Healthcare 2014-17",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+
+healthcare_brampton_second_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(healthcare_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(healthcare_brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.8) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.8) +
+  tm_layout(
+    title = "Brampton Healthcare Projects 2014-20",
+    legend.outside = FALSE,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+healthcare_brampton_third_plot <- tm_shape(brampton_cropped) +
+  tm_rgb() +
+  tm_shape(healthcare_brampton_first) +
+  tm_dots(col = "red", size = 0.1, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(healthcare_brampton_second) +
+  tm_dots(col = "blue", size = 0.05, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_shape(healthcare_brampton_third) +
+  tm_dots(col = "green", size = 0.025, popup.vars = c("id", "name"), legend.show = FALSE) +
+  tm_add_legend(type = "symbol", col = "red", labels = "2014-17", size = 0.8) +
+  tm_add_legend(type = "symbol", col = "blue", labels = "2017-20", size = 0.8) +
+  tm_add_legend(type = "symbol", col = "green", labels = "2020-24", size = 0.8) +
+  tm_layout(
+    title = "Brampton Healthcare Projects 2014-24",
+    legend.outside = ,
+    legend.outside.position = "right",
+    legend.title.size = 1.2,
+    legend.text.size = 0.75,
+    legend.bg.color = "white",
+    legend.bg.alpha = 0.5
+  )
+
+tmap_arrange(healthcare_brampton_first_plot, healthcare_brampton_second_plot, healthcare_brampton_third_plot, ncol = 3)
+```
