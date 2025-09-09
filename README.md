@@ -54,8 +54,10 @@ This project explores **urban sprawl patterns in Canada** using land cover datas
 ## Project Structure
 ```
 ├── DATA6500-Land Use for final.Rmd   # Main R Markdown notebook
-├── data/                             # Land cover datasets
-├── outputs/                          # Generated plots, maps, and results
+├── Data Cleaning                 # Date cleaning 
+├── Datasets/                             # Land cover datasets
+├── EDA/                          # Generated plots, maps, and EDA
+├── Experiment/                   #Some experiments performed
 ├── README.md                         # Project documentation
 ```
 
